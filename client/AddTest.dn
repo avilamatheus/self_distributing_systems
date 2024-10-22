@@ -1,0 +1,39 @@
+component provides App requires io.Output out, net.http.HTTPRequest http, data.IntUtil iu, io.Input in, data.json.JSONParser parser {
+	char server[] = "http://localhost:8079/docker"
+
+	int App:main(AppParam params[]) {
+        
+        //HTTPResponse resp = http.get(new char[](server, "/list-containers"), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")))
+		//out.println("$(resp.content)")
+
+        int number = iu.intFromString(in.readln())
+
+        HTTPResponse resp = http.post(new char[](server, "/start-containers/", iu.intToString(number)), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")), null)
+		//out.println("$(resp.content)")
+
+        
+        JSONElement json = parser.parseDocument(resp.content)
+
+
+        //JSONElement name = parser.getValue(json.children[3], new char[]("name"))
+
+        //char jsonChar[] = parser.documentToString(name)
+        //out.println("$(jsonChar)")
+
+        
+        for (int i = json.children.arrayLength; i > 0; i--) {
+            JSONElement containerNameJson = parser.getValue(json.children[i-1], new char[]("name"))
+            char containerName[] = containerNameJson.value
+
+            out.println("$(containerName)")
+		}
+        
+
+        //char jsonChar[] = parser.documentToString(json)
+
+
+        //out.println("$(jsonChar)")
+
+		return 0
+	}
+}

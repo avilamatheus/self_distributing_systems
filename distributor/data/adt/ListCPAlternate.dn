@@ -30,11 +30,11 @@ const char GET_LENGTH[]   = "getLength"
 const char GET_CONTENTS[] = "getContents"
 const char CLEAR_LIST[]   = "clearList"
 
-/* IPs */
-const char LOCALHOST[] = "localhost"
+const char CONTAINERMANAGER[] = "http://container-manager:8079/docker"
 
-component provides List:heap(Destructor, AdaptEvents) requires data.json.JSONEncoder parser,
-net.TCPSocket, net.TCPServerSocket, data.StringUtil strUtil, io.Output out, data.IntUtil iu {
+component provides List:heap(Destructor, AdaptEvents) requires data.json.JSONEncoder encoder,
+net.TCPSocket, net.TCPServerSocket, data.StringUtil strUtil, io.Output out, data.IntUtil iu,
+data.json.JSONParser parser, net.http.HTTPRequest http {
 
 	IPAddr remoteDistsIps[] = null
 	IPAddr remoteListsIps[] = null
@@ -42,27 +42,36 @@ net.TCPSocket, net.TCPServerSocket, data.StringUtil strUtil, io.Output out, data
 	int pointer = 0
 
 	void setupRemoteDistsIPs() {
-		if (remoteDistsIps == null) {
-			remoteDistsIps = new IPAddr[2]
-			remoteDistsIps[0] = new IPAddr()
-			remoteDistsIps[0].ip = new char[](LOCALHOST)
-			remoteDistsIps[0].port = 8081
-			remoteDistsIps[1] = new IPAddr()
-			remoteDistsIps[1].ip = new char[](LOCALHOST)
-			remoteDistsIps[1].port = 8082
-		}
+			HTTPResponse resp = http.get(new char[](CONTAINERMANAGER, "/list-containers"), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")))
+			JSONElement json = parser.parseDocument(resp.content)
+
+			remoteDistsIps = new IPAddr[json.children.arrayLength]
+
+			for (int i = 0; i < remoteDistsIps.arrayLength; i++) {
+				JSONElement containerNameJson = parser.getValue(json.children[i], new char[]("name"))
+				char containerName[] = containerNameJson.value
+
+				remoteDistsIps[i] = new IPAddr()
+				remoteDistsIps[i].ip = new char[](containerName)
+				remoteDistsIps[i].port = 8081	
+			}
 	}
 
-	void setupRemoteListsIPs() {
-		if (remoteListsIps == null) {
-			remoteListsIps = new IPAddr[2]
-			remoteListsIps[0] = new IPAddr()
-			remoteListsIps[0].ip = new char[](LOCALHOST)
-			remoteListsIps[0].port = 2010
-			remoteListsIps[1] = new IPAddr()
-			remoteListsIps[1].ip = new char[](LOCALHOST)
-			remoteListsIps[1].port = 2011
-		}
+	void setupRemoteListsIPs(){
+
+			HTTPResponse resp = http.get(new char[](CONTAINERMANAGER, "/list-containers"), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")))
+			JSONElement json = parser.parseDocument(resp.content)
+
+			remoteListsIps = new IPAddr[json.children.arrayLength]
+
+			for (int i = 0; i < remoteListsIps.arrayLength; i++) {
+				JSONElement containerNameJson = parser.getValue(json.children[i], new char[]("name"))
+				char containerName[] = containerNameJson.value
+
+				remoteListsIps[i] = new IPAddr()
+				remoteListsIps[i].ip = new char[](containerName)
+				remoteListsIps[i].port = 2010
+			}
 	}
 
 	void sendMsgToRemoteDists(char msg[]) {
@@ -76,13 +85,13 @@ net.TCPSocket, net.TCPServerSocket, data.StringUtil strUtil, io.Output out, data
 		String helper[] = strUtil.explode(content, "!")
 		Response response
 		if (helper.arrayLength > 1) {
-			response = parser.jsonToData(helper[0].string, typeof(Response), null)
+			response = encoder.jsonToData(helper[0].string, typeof(Response), null)
 			Response response2 = new Response()
 			response2.value = helper[1].string
 			response2.status = response.status
 			response = response2
 		} else {
-			response = parser.jsonToData(content, typeof(Response), null)
+			response = encoder.jsonToData(content, typeof(Response), null)
 		}
 		return response
 	}
@@ -132,7 +141,7 @@ net.TCPSocket, net.TCPServerSocket, data.StringUtil strUtil, io.Output out, data
 		setupRemoteListsIPs()
 		IPAddr addr = null
 		mutex(remoteListsIpsLock) {
-			if (remoteListsIps.arrayLength > 1) {
+			if (remoteListsIps.arrayLength > 0) {
 				if (pointer == remoteListsIps.arrayLength) { pointer = 0 }
 				addr = remoteListsIps[pointer]
 				pointer++
@@ -145,8 +154,8 @@ net.TCPSocket, net.TCPServerSocket, data.StringUtil strUtil, io.Output out, data
 		Request request = new Request()
 		request.functionName = ADD
 		request.numParams = 1
-		char requestStr[] = parser.jsonFromData(request, null)
-		char param[] = parser.jsonFromData(item, null)
+		char requestStr[] = encoder.jsonFromData(request, null)
+		char param[] = encoder.jsonFromData(item, null)
 		char content2[] = new char[](requestStr, "!", param, "\r\r\r\r")
 		makeRequest(content2)
 	}
@@ -187,7 +196,7 @@ net.TCPSocket, net.TCPServerSocket, data.StringUtil strUtil, io.Output out, data
 		Request request = new Request()
 		request.functionName = GET_LENGTH
 		request.numParams = 0
-		char requestStr[] = parser.jsonFromData(request, null)
+		char requestStr[] = encoder.jsonFromData(request, null)
 		char content2[] = new char[](requestStr, "!", " ", "\r\r\r\r")
 		Response response = makeRequest(content2)
 		return iu.intFromString(response.value)
@@ -197,10 +206,10 @@ net.TCPSocket, net.TCPServerSocket, data.StringUtil strUtil, io.Output out, data
 		Request request = new Request()
 		request.functionName = GET_CONTENTS
 		request.numParams = 0
-		char requestStr[] = parser.jsonFromData(request, null)
+		char requestStr[] = encoder.jsonFromData(request, null)
 		char content2[] = new char[](requestStr, "!", " ", "\r\r\r\r")
 		Response response = makeRequest(content2)
-		Int nums[] = parser.jsonToArray(response.value, typeof(Int[]), null)
+		Int nums[] = encoder.jsonToArray(response.value, typeof(Int[]), null)
 		return nums
 	}
 
@@ -231,7 +240,7 @@ net.TCPSocket, net.TCPServerSocket, data.StringUtil strUtil, io.Output out, data
 	// this is extremely hardcoded! ):
 	void AdaptEvents:active() {
 		if (content != null) {
-			char state[] = parser.jsonFromArray(content, null)
+			char state[] = encoder.jsonFromArray(content, null)
 			char msg[] = new char[]("../distributor/RemoteList.o!", state, "\r\r\r\r")
 			sendMsgToRemoteDists(msg)
 		}
