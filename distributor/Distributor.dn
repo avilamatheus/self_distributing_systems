@@ -12,10 +12,12 @@ const char TEST3[]		= "test3"
 const char TEST4[]		= "test4"
 const char EXIT[]       = "exit"
 const int PORT			= 3500
+const char CONTAINERMANAGER[] = "http://container-manager:8079/docker"
 
 component provides App requires io.Output out, data.StringUtil strUtil, data.IntUtil iu, io.Input in, 
 	monitoring.Perception, data.json.JSONEncoder encoder, data.DecUtil du, time.Timer t, 
-	http.HTTPUtil httpUtil, net.TCPSocket, net.TCPServerSocket {
+	http.HTTPUtil httpUtil, net.TCPSocket, net.TCPServerSocket, net.http.HTTPRequest http, 
+	data.json.JSONParser parser {
 
 	String remoteConfigs[] 		= null
 	String localConfigs[] 		= null
@@ -91,16 +93,31 @@ component provides App requires io.Output out, data.StringUtil strUtil, data.Int
 		}
 	}
 
+	void startContainers() {
+		out.println("Select the number of containers: ")
+		int numberOfContainers = iu.intFromString(in.readln())
+		http.post(new char[](CONTAINERMANAGER, "/start-containers/", iu.intToString(numberOfContainers)), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")), null)
+	}
+
 	void commandInterpret(char cmd[]) {
 		String cmdList[] = strUtil.explode(cmd, " ")
 		if (cmdList.arrayLength == 1) {
 			if (cmd == HELP) {
 				help()
 			} else if (cmd == PROPAGATE) {
+				startContainers()
+				out.println("Press enter to begin propagation...")
+				in.readln()
 				distribute("ListCPPropagate.o")
 			} else if (cmd == ALTERNATE) {
+				startContainers()
+				out.println("Press enter to begin alternating...")
+				in.readln()
 				distribute("ListCPAlternate.o")
 			} else if (cmd == SHARDING) {
+				startContainers()
+				out.println("Press enter to begin sharding...")
+				in.readln()
 				distribute("ListCPSharding.o")
 			} else if (cmd == LOCAL) {
 				local()
