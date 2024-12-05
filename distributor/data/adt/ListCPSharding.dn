@@ -44,7 +44,7 @@ component provides List:heap(Destructor, AdaptEvents) requires data.json.JSONEnc
 	IPAddr remoteListsIps[] = null
 
 	void setupRemoteDistsIPs() {
-			HTTPResponse resp = http.get(new char[](CONTAINERMANAGER, "/list-containers"), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")))
+			HTTPResponse resp = http.get(new char[](CONTAINERMANAGER, "/list-containers/remote-dist"), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")))
 			JSONElement json = parser.parseDocument(resp.content)
 
 			remoteDistsIps = new IPAddr[json.children.arrayLength]
@@ -61,7 +61,7 @@ component provides List:heap(Destructor, AdaptEvents) requires data.json.JSONEnc
 
 	void setupRemoteListsIPs(){
 
-			HTTPResponse resp = http.get(new char[](CONTAINERMANAGER, "/list-containers"), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")))
+			HTTPResponse resp = http.get(new char[](CONTAINERMANAGER, "/list-containers/remote-dist"), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")))
 			JSONElement json = parser.parseDocument(resp.content)
 
 			remoteListsIps = new IPAddr[json.children.arrayLength]

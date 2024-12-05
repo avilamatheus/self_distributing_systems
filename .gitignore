@@ -5,3 +5,5 @@
 *.out
 *.iml
 .DS_Store
+AddTest.dn
+AddTest.o

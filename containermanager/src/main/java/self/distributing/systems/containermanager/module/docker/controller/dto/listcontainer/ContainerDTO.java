@@ -13,7 +13,8 @@ public record ContainerDTO(
         String name,
         String image,
         String state,
-        List<ContainerPortDTO> ports
+        List<ContainerPortDTO> ports,
+		List<String> cmd
 ) {
 
 	@Override public boolean equals(Object o) {

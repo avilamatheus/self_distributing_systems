@@ -42,7 +42,7 @@ data.json.JSONParser parser, net.http.HTTPRequest http {
 	int pointer = 0
 
 	void setupRemoteDistsIPs() {
-			HTTPResponse resp = http.get(new char[](CONTAINERMANAGER, "/list-containers"), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")))
+			HTTPResponse resp = http.get(new char[](CONTAINERMANAGER, "/list-containers/remote-dist"), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")))
 			JSONElement json = parser.parseDocument(resp.content)
 
 			remoteDistsIps = new IPAddr[json.children.arrayLength]
@@ -58,8 +58,7 @@ data.json.JSONParser parser, net.http.HTTPRequest http {
 	}
 
 	void setupRemoteListsIPs(){
-
-			HTTPResponse resp = http.get(new char[](CONTAINERMANAGER, "/list-containers"), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")))
+			HTTPResponse resp = http.get(new char[](CONTAINERMANAGER, "/list-containers/remote-dist"), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")))
 			JSONElement json = parser.parseDocument(resp.content)
 
 			remoteListsIps = new IPAddr[json.children.arrayLength]

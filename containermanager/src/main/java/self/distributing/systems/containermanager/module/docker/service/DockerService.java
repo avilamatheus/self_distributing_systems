@@ -5,10 +5,9 @@ import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.exception.DockerException;
 import com.github.dockerjava.api.model.Container;
 import com.github.dockerjava.api.model.ContainerPort;
-import com.github.dockerjava.api.model.ExposedPort;
+import com.github.dockerjava.api.model.HostConfig;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 
 import self.distributing.systems.containermanager.module.docker.controller.dto.listcontainer.ContainerDTO;
@@ -16,11 +15,8 @@ import self.distributing.systems.containermanager.module.docker.controller.dto.l
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-
-import lombok.SneakyThrows;
 
 @Service
 public class DockerService {
@@ -28,70 +24,64 @@ public class DockerService {
 	@Autowired
 	private DockerClient dockerClient;
 
-	private final static String CONTAINER_NAME = "remote-dist";
-
-	private List<Container> containerList(boolean showStoppedContainers) {
-		Map<String, List<String>> filters = new HashMap<>();
-		filters.put("name", List.of("remote-dist"));
-
+	private List<Container> containerList(boolean showStoppedContainers, String containerName) {
 		List<String> statusFilter = new ArrayList<>();
 		statusFilter.add("running");
-		if(showStoppedContainers) {statusFilter.add("exited");}
-
-		return dockerClient.listContainersCmd()
-				.withNameFilter(List.of("remote-dist"))
-				.withStatusFilter(statusFilter)
-				.exec();
-	}
-
-	public List<ContainerDTO> simpleListContainers() {
-		List<ContainerDTO> response = new ArrayList<>();
-		List<Container> runningContainers = this.containerList(false);
-
-		for (Container container : runningContainers) {
-			ContainerDTO containerDTO = new ContainerDTO(
-					null,
-					Arrays.stream(container.getNames()).toList().get(0).substring(1),
-					null,
-					null,
-					null
-			);
-			response.add(containerDTO);
+		if (showStoppedContainers) {
+			statusFilter.add("exited");
 		}
-		return response;
+
+		// Configura o comando e adiciona filtros de forma condicional
+		var listCommand = dockerClient.listContainersCmd().withStatusFilter(statusFilter);
+		if (containerName != null && !containerName.isEmpty()) {
+			listCommand = listCommand.withNameFilter(List.of(containerName));
+		}
+
+		return listCommand.exec();
 	}
 
-	public List<ContainerDTO> detailedListContainers() {
-		List<ContainerDTO> response = new ArrayList<>();
-
-		for (Container container : containerList(true)) {
-
-			List<ContainerPortDTO> portsList = new ArrayList<>();
+	private ContainerDTO toContainerDTO(Container container, boolean detailed) {
+		List<ContainerPortDTO> portsList = new ArrayList<>();
+		if (detailed) {
 			for (ContainerPort containerPort : container.getPorts()) {
-				ContainerPortDTO portDTO = new ContainerPortDTO(
+				portsList.add(new ContainerPortDTO(
 						containerPort.getIp(),
 						containerPort.getPublicPort(),
 						containerPort.getPrivatePort()
-				);
-				portsList.add(portDTO);
+				));
 			}
+		}
 
-			ContainerDTO containerDTO = new ContainerDTO(
-					container.getId(),
-					Arrays.stream(container.getNames()).toList().get(0).substring(1),
-					container.getImage(),
-					container.getState(),
-					portsList
-			);
+		return new ContainerDTO(
+				container.getId(),
+				Arrays.stream(container.getNames()).toList().get(0).substring(1),
+				detailed ? container.getImage() : null,
+				detailed ? container.getState() : null,
+				detailed ? portsList : null,
+				detailed ? Collections.singletonList(container.getCommand()) : null
+		);
+	}
 
-			response.add(containerDTO);
+	public List<ContainerDTO> simpleListContainers(String containerName) {
+		List<ContainerDTO> response = new ArrayList<>();
+		for (Container container : containerList(false, containerName)) {
+			response.add(toContainerDTO(container, false));
 		}
 		return response;
 	}
 
-	public List<ContainerDTO> startContainers(int numberOfContainers) throws InterruptedException, DockerException {
-		List<ContainerDTO> requestedContainers = requestedContainers(numberOfContainers);
-		List<ContainerDTO> currentContainers = detailedListContainers();
+	public List<ContainerDTO> detailedListContainers(String containerName) {
+		List<ContainerDTO> response = new ArrayList<>();
+		for (Container container : containerList(true, containerName)) {
+			response.add(toContainerDTO(container, true));
+		}
+		return response;
+	}
+
+
+	public List<ContainerDTO> startContainers(int numberOfContainers, String containerName, String cmd) throws InterruptedException, DockerException {
+		List<ContainerDTO> requestedContainers = requestedContainers(numberOfContainers, containerName, cmd);
+		List<ContainerDTO> currentContainers = detailedListContainers(containerName);
 
 		List<ContainerDTO> containersToBeStopped = currentContainers.stream()
 				.filter(container -> !requestedContainers.contains(container) && !container.state().equals("exited"))
@@ -121,11 +111,11 @@ public class DockerService {
 		requestedContainers.removeAll(stoppedContainersToBeStarted);
 		this.startStoppedContainers(stoppedContainersToBeStarted);
 
-		return this.simpleListContainers(); // Lista os containers
+		return this.simpleListContainers(containerName); // Lista os containers
 	}
 
 	public void stopAndRemoveContainers() {
-		List<ContainerDTO> containers = this.detailedListContainers();
+		List<ContainerDTO> containers = this.detailedListContainers(null);
 		for (ContainerDTO container : containers) {
 			dockerClient.removeContainerCmd(container.id()).withForce(true).exec();
 		}
@@ -153,12 +143,13 @@ public class DockerService {
 			// Cria o container
 			CreateContainerResponse container = dockerClient.createContainerCmd("dana")
 					.withName(containerDTO.name())
-					// desnecessario, jã que estâo na mesma rede:
-					//.withExposedPorts(ExposedPort.tcp(2010), ExposedPort.tcp(8081))
 					.withTty(true)
 					.withStdinOpen(true)
-					.withNetworkMode("sds_network")
-					.withCmd("dana", "-sp", "../readn", "RemoteDist.o")
+					.withCmd(containerDTO.cmd())
+					.withHostConfig(
+							HostConfig.newHostConfig()
+									.withNetworkMode("sds_network")
+					)
 					.exec();
 
 			// Inicia o container
@@ -166,15 +157,25 @@ public class DockerService {
 		}
 	}
 
-	private List<ContainerDTO> requestedContainers(int numberOfContainers) {
+	private List<ContainerDTO> requestedContainers(int numberOfContainers, String containerName, String cmd) {
+		List<String> cmdInput = splitStringBySpaces(cmd);
 		List<ContainerDTO> listOfRequestedContainers = new ArrayList<>();
 
 		for (int i = 1; i <= numberOfContainers; i++) {
-			ContainerDTO requestedContainer = new ContainerDTO(null, CONTAINER_NAME + i, null, null, null);
+			ContainerDTO requestedContainer = new ContainerDTO(null, containerName + i, null, null, null, cmdInput);
 			listOfRequestedContainers.add(requestedContainer);
 		}
 
 		return listOfRequestedContainers;
 	}
 
+	private List<String> splitStringBySpaces(String input) {
+		if (input == null || input.isEmpty()) {
+			return Collections.emptyList();
+		}
+		return Arrays.stream(input.split("\\s+"))
+				.map(String::trim)
+				.filter(s -> !s.isEmpty())
+				.toList();
+	}
 }

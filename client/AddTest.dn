@@ -6,9 +6,9 @@ component provides App requires io.Output out, net.http.HTTPRequest http, data.I
         //HTTPResponse resp = http.get(new char[](server, "/list-containers"), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")))
 		//out.println("$(resp.content)")
 
-        int number = iu.intFromString(in.readln())
+        //int number = iu.intFromString(in.readln())
 
-        HTTPResponse resp = http.post(new char[](server, "/start-containers/", iu.intToString(number)), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")), null)
+        HTTPResponse resp = http.post(new char[](server, "/start-containers/remote-dist/", iu.intToString(1)), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close"), new Header("cmd", "dana -sp ../readn RemoteDist.o")), null)
 		//out.println("$(resp.content)")
 
         
@@ -33,6 +33,8 @@ component provides App requires io.Output out, net.http.HTTPRequest http, data.I
 
 
         //out.println("$(jsonChar)")
+
+        //HTTPResponse resp = http.get(new char[](server, "/list-containers/remote-dist"), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")))
 
 		return 0
 	}

@@ -96,7 +96,7 @@ component provides App requires io.Output out, data.StringUtil strUtil, data.Int
 	void startContainers() {
 		out.println("Select the number of containers: ")
 		int numberOfContainers = iu.intFromString(in.readln())
-		http.post(new char[](CONTAINERMANAGER, "/start-containers/", iu.intToString(numberOfContainers)), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")), null)
+		http.post(new char[](CONTAINERMANAGER, "/start-containers/remote-dist/", iu.intToString(numberOfContainers)), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close"), new Header("cmd", "dana -sp ../readn RemoteDist.o")), null)
 	}
 
 	void commandInterpret(char cmd[]) {
