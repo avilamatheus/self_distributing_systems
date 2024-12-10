@@ -1,63 +1,112 @@
-# Sistemas Auto-distribuídos: Instanciação dinâmica de componentes
+# Sistemas Auto-distribuídos: Instanciação Dinâmica de Componentes
 
 ## Introdução
 
-Este projeto consiste em permitir que os componentes _RemoteDist_ sejam instanciados dinamicamente em tempo de execução, sem a necessidade de recompilação do código fonte. Para isso, foi desenvolvida uma API que se comunica com o Docker Engine para instanciar, listar e remover containers do tipo _RemoteDist_. Como isso foi feito, além de mais detalhes sobre o projeto, serão apresentados nas próximas seções.
+Aplicações modernas, como Internet das Coisas (IoT), análise de dados, streaming de vídeo, realidade aumentada e realidade virtual, apresentam requisitos rigorosos de qualidade de serviço, especialmente em termos de tempo de resposta e throughput.
 
-## Estrutura do Projeto (Containers)
+Essas demandas resultaram na necessidade de infraestruturas ricas em recursos computacionais, levando ao desenvolvimento do **Edge-Cloud Continuum**, uma abordagem que combina plataformas de computação em borda e nuvem para oferecer escalabilidade, flexibilidade e mobilidade. Essa combinação permite que aplicações sejam implementadas em toda a rede, otimizando a qualidade de serviço.
 
-### dana
+No entanto, muitas aplicações não conseguem explorar plenamente o potencial do Edge-Cloud Continuum devido à sua arquitetura monolítica e com estado. Os **Sistemas Auto-Distribuídos** surgem como uma alternativa para superar essa limitação. Eles permitem que aplicações monolíticas sejam replicadas ou movidas em infraestruturas distribuídas em tempo de execução, facilitando o dimensionamento horizontal e a implantação em ambientes híbridos de borda e nuvem.
 
-O container chamado _dana_ é responsável por executar a aplicação dana, contendo todos os devidos componentes. A imagem do container é criada a partir de um arquivo Dockerfile, que baixa o dana versão 253 e copia o codigo fonte deste projeto para o container, e, ao final, executa o comando `dana -sp "../server;../readn" Distributor.o` para executar a aplicação.
+Apesar de promissores, os Sistemas Auto-Distribuídos ainda não estão integrados a infraestruturas amplamente adotadas, como contêineres e orquestradores, sendo implantados de forma específica em nível de processos. Este projeto busca superar essas limitações, integrando Sistemas Auto-Distribuídos a contêineres e orquestradores amplamente utilizados, como Docker e Kubernetes.
 
-O código fonte dana foi alterado para suportar a instanciação dinâmica de componentes _RemoteDist_. Para isso, durante a escolha do proxy (sharding, propagate, alternate), é solicitado o número de instancias do componente _RemoteDist_ que o usuário deseja instanciar em containers, realizando um POST para a API solicitando a instanciação dos containers.
+---
 
-Além disso, os proxies em si realizam um GET para a API para obter a lista de containers _RemoteDist_ instanciados, e, a partir disso, realizar a distribuição de requisições entre os containers.
+## Descrição da Proposta
 
-### container-manager
+### Detalhamento da Solução Proposta
 
-O container chamado _container-manager_ é responsável por gerenciar a instância dos containers _RemoteDist_. A API foi desenvolvida em Java/Spring Boot, sendo gerenciada com Maven. A API se comunica com o Docker Engine utilizando a biblioteca _docker-java_.
+O trabalho desenvolvido neste projeto concentrou-se na integração inicial de Sistemas Auto-Distribuídos com contêineres Docker, utilizando uma abordagem baseada em instanciação dinâmica de componentes e comunicação via redes privadas Docker. A solução implementada tem os seguintes objetivos:
 
-Basicamente, a API tem como responsabilidade instanciar, listar e remover containers do tipo _RemoteDist_, sempre conectando-os à mesma rede Docker que o container _dana_ e a API estão conectados.
+- **Encapsulamento de Componentes:** Criar uma imagem Docker base única, denominada `dana`, contendo todos os requisitos e configurações necessários para o programa. Essa imagem foi utilizada como base para instanciar os diferentes componentes do sistema, garantindo consistência e isolamento.
+- **Instanciação Dinâmica:** Implementar um mecanismo para instanciar dinamicamente componentes durante a execução, evitando a necessidade de criar novos contêineres para cada instância. Essa abordagem otimiza os recursos e reduz o tempo de inicialização.
 
-A API possui os seguintes endpoints:
+- **Automação do Gerenciamento:** Desenvolver uma API RESTful para automatizar a gestão de contêineres, permitindo criar, listar e remover instâncias conforme a demanda.
 
-- `GET /docker/list-containers`: Lista todos os containers do tipo _RemoteDist_ instanciados.
-- `GET /docker/list-containers-detailed`: Lista todos os containers do tipo _RemoteDist_ instanciados, com informações detalhadas.
-- `POST /docker/start-containers/{num}`: Instancia um número `num` de containers do tipo _RemoteDist_.
-- `DELETE /docker/remove-containers`: Remove todos os containers do tipo _RemoteDist_ instanciados.
+- **Comunicação em Rede Docker:** Configurar uma rede privada Docker para permitir a comunicação direta entre os componentes, eliminando a necessidade de expor portas ao ambiente externo.
 
-A imagem do container é buildada a partir de um Dockerfile que copia o código fonte da API para o container e executa comandos maven para buildar a aplicação e ao final executa-lá com comandos java.
+Este trabalho foi uma etapa inicial, focada no uso de contêineres como meio para distribuir componentes de maneira dinâmica e eficiente. No futuro, pretende-se expandir essa solução para integrar completamente os Sistemas Auto-Distribuídos com plataformas de borda e nuvem, como Google Cloud e KubeEdge, possibilitando uma infraestrutura híbrida que abrange o Edge-Cloud Continuum.
 
-Outro aspecto a se considerar é que a API reaproveita remote-dists que foram instanciados anteriormente, evitando a necessidade de dropar e criar novos containers a cada requisição. Se o usuario solicitar a instanciação de 5 containers, e já existirem 3 containers instanciados, a API irá instanciar apenas 2 novos containers. Caso contrário, se o usuário solicitar a instanciação de 2 containers, e já existirem 5 containers instanciados, a API não irá instanciar novos containers, mas sim dropar os containers excedentes.
+---
 
-Outro ponto relevante é que, por estar na mesma rede Docker, os remotes dists instanciados pela API são acessíveis pelo container _dana_ apenas pelo nome do container, sem a necessidade de expor portas, facilitando a comunicação entre os containers.
+## Principais Funcionalidades
 
-### remote-dist{x}
+As funcionalidades principais desenvolvidas neste projeto são:
 
-Os containers _remote-dist{x}_ são instâncias do componente _RemoteDist_ que são instanciados dinamicamente pela API. Onde _{x}_ é um número que identifica o container.
+- **Instanciação Dinâmica de Componentes:** Permitir que componentes sejam instanciados dinamicamente durante a execução, sem necessidade de recompilação, facilitando a escalabilidade do sistema.
+- **Reaproveitamento de Contêineres:** Evitar a criação desnecessária de novos contêineres, reduzindo o tempo de inicialização e otimizando o uso de recursos.
+- **Integração com Docker:** Contêinerização dos componentes usando uma imagem base única para garantir portabilidade e isolamento.
+- **Comunicação em Rede Docker:** Configuração de uma rede privada Docker para facilitar a comunicação entre os componentes, dispensando a exposição de portas desnecessárias.
+- **Gerenciamento de Contêineres com API:** Desenvolvimento de uma API para gerenciar a instanciação, remoção e listagem dos contêineres dinamicamente.
 
-Para buildar os RemotesDists, a API reaproveita a imagem do container _dana_, apenas alterando o comando de execução para `dana -sp ../readn RemoteDist.o`.
+---
 
-## docker-compose.yaml
+## Abordagem Utilizada para Implementação
 
-Nesse arquivo é definido a estrutura dos containers que serão instanciados primeiramente, sendo eles o _dana_ e o _container-manager_. Além disso, é definida a rede Docker que os containers estarão conectados, nesse caso, `sds_network`.
+A implementação deste projeto foi dividida em etapas específicas para atender os requisitos de integração com infraestrutura de borda e nuvem:
 
-O container _dana_ é exposto na porta 8080 do host, enquanto a API é exposta na porta 8079. Os remote-dists não possuem portas expostas, sendo acessíveis apenas dentro da _sds_network_ pelos containers _dana_ e _container-manager_.
+1. **Contêinerização com Docker:**
 
-## Pré Requisitos
+   - Foi criada uma imagem base, chamada `dana`, utilizando um Dockerfile que configura o ambiente e os requisitos do programa.
+   - Os componentes do sistema foram instanciados dinamicamente usando essa imagem como base, garantindo consistência e reduzindo o tempo de build.
 
-- Dana versão 253 (disponível em https://www.projectdana.com/download/ubu64/253, para Ubuntu 64 bits)
-- Docker e Docker Compose (disponíveis em https://docs.docker.com/get-docker/ e https://docs.docker.com/compose/install/)
+2. **Desenvolvimento de API para Gerenciamento:**
 
-## Execução
+   - Uma API RESTful foi desenvolvida em Java/Spring Boot para gerenciar dinamicamente os contêineres do sistema.
+   - Endpoints permitem instanciar, listar e remover contêineres, além de reaproveitar contêineres existentes para otimizar o uso de recursos.
 
-Primeiramente é necessário buildar o codigo fonte do projeto dana, executando o comando `./build.sh`.
+3. **Instanciação Dinâmica:**
 
-Após isso, basta executar o comando `docker compose up --build -d` para instanciar os containers _dana_ e _container-manager_.
+   - Os componentes podem ser instanciados passando comandos e nomes específicos, permitindo a flexibilidade para lidar com diferentes partes do sistema.
+   - Essa abordagem possibilita escalabilidade dinâmica durante a execução, sem a necessidade de alterações no código fonte.
 
-Ao final do build, para acessar o container _dana_, execute o comando `docker attach dana` e digite `help` para ver os comandos disponíveis.
+4. **Integração com Edge-Cloud:**
 
-Quando escolhido um dos 3 proxies (sharding, propagate, alternate), será solicitado o número de instâncias do componente _RemoteDist_ que o usuário deseja instanciar em containers. Após a escolha, a API irá instanciar os containers e o programa solicitará para que o usuario clique `Enter` para continuar a distribuição. Isso foi feito para que o usuário tenha tempo para dar `docker attach remote-dist{x}` e ver a lista sendo distribuída entre os containers.
+   - Apesar de ainda não concluída, a integração com Google Cloud e KubeEdge está nos planos futuros, visando a expansão da solução para ambientes distribuídos híbridos.
 
-Uma observação importante é que para alterar o número de containers, deve-se primeiro voltar a composição local e posteriormente escolher o proxy desejado com o novo número de containers desejado.
+## Diagrama de Comunicação - Projeto Atual
+
+### Composição Local
+
+![alt text](/readmecontent/local1.png)
+
+### Composição Distribuída
+
+![alt text](/readmecontent/dist1.png)
+
+## Diagrama de Comunicacão - Projeto Futuro
+
+Nesta seção, apresentaremos dois diagramas que ilustram o fluxo de dados e a comunicação entre os componentes do sistema em diferentes cenários de operação.
+
+O primeiro diagrama foca na substituição de componentes por proxies dentro de uma aplicação que roda na borda (Edge). Ele demonstra como componentes individuais podem ser realocados dinamicamente, com a camada de proxies garantindo a continuidade do serviço e a transparência na comunicação entre os módulos.
+
+O segundo diagrama expande essa visão ao representar os mesmos componentes distribuídos entre a borda e a nuvem (Cloud), mostrando a comunicação entre ambos os ambientes. Esse cenário destaca como os componentes da aplicação podem ser transferidos da borda para a nuvem, garantindo otimização e flexibilidade em termos de desempenho.
+
+Embora a comunicação entre a borda e a nuvem seja o foco principal para fins de compreensão, o processo inverso – realocação de componentes da nuvem para a borda – também pode ocorrer. No entanto, utilizamos o cenário de borda para nuvem devido à sua maior simplicidade de entendimento para a presente explicação.
+
+Após a apresentação de cada diagrama, explicaremos os pontos mais relevantes de sua estrutura, detalhando os elementos destacados e suas funções dentro do sistema.
+
+![Diagrama de comunicação - Parte 1](readmecontent/diagrama1.png)
+
+Sobre cada um dos pontos numerados neste primeiro diagrama, podemos comentar o seguinte:
+
+1. **Dispositivos de Borda (Edge):** Representa os diversos dispositivos de borda nos quais a aplicação pode estar em execução. A borda (Edge) é responsável por fornecer processamento local e imediato, reduzindo a latência e o uso de largura de banda ao evitar a necessidade de enviar todos os dados diretamente para a nuvem. Nesse cenário, a aplicação está rodando diretamente em um destes dispositivos, permitindo a realocação e substituição de componentes conforme necessário para otimizar o desempenho e a continuidade dos serviços.
+2. **Orquestradores de Contêineres na Borda (KubeEdge, MicroK8s, K3s):** Estes são os orquestradores de contêineres que operam nos dispositivos de borda, responsáveis por gerenciar e coordenar a execução dos contêineres que compõem a aplicação distribuída. KubeEdge, MicroK8s e K3s são soluções otimizadas para ambientes de borda, garantindo a eficiência na execução de contêineres em dispositivos com recursos limitados.
+3. **Container Docker:** Este representa o ambiente isolado onde a aplicação está em execução, encapsulando seus componentes e dependências. O Docker permite que a aplicação rode de forma consistente em qualquer infraestrutura, seja na borda ou na nuvem.
+4. **Aplicação Baseada em Sistemas Auto-Distribuídos (Componentes A, B, C, D, E):** A aplicação em execução dentro do contêiner Docker é composta por diversos componentes distribuídos e realocados dinamicamente entre diferentes ambientes.
+5. **Componentes Destinados à Realocação (Componentes D e E):** Os componentes D e E serão realocados para a nuvem, motivados por necessidade de maior capacidade computacional ou outras otimizações de desempenho.
+6. **Proxy para Componentes Realocados:** Após a realocação dos componentes D e E para a nuvem, eles serão substituídos localmente por um proxy que atua como intermediário, garantindo a continuidade do funcionamento do sistema.
+
+![Diagrama de comunicação - Parte 2](readmecontent/diagrama2.png)
+
+Sobre cada um dos pontos numerados neste segundo diagrama, podemos comentar o seguinte:
+
+7. **Conexão RPC entre Proxy e Componentes Realocados:** Conexão remota via RPC (Remote Procedure Call) entre o proxy na borda e os componentes realocados na nuvem.
+8. **Ambiente de Nuvem (AWS, Google Cloud, Azure):** Representa as plataformas de nuvem que oferecem a infraestrutura para hospedar e executar os componentes realocados.
+9. **Orquestrador de Contêineres na Nuvem (Kubernetes):** Gerencia o ciclo de vida dos contêineres que hospedam os componentes realocados, facilitando escalabilidade e resiliência.
+10. **Componentes Realocados dentro de Contêineres Docker e Replicados:** Componentes D e E, realocados para a nuvem, executam dentro de contêineres Docker e podem ser replicados para garantir resiliência e desempenho.
+
+## Mais Detalhes
+
+- <a href="/readmecontent/execute.md">Como executar o projeto</a>
+- <a href="/readmecontent/api.md">Como funciona a API</a>
