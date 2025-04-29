@@ -10,9 +10,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - sds_network
-
   dana:
-    image: dana
+    image: avilamatheus/dana-sds
     container_name: dana
     build:
       context: .
@@ -26,5 +25,4 @@ services:
       - sds_network
 networks:
   sds_network:
-    driver: bridge
-    name: sds_network
+    external: true

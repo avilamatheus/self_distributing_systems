@@ -46,31 +46,32 @@ component provides List:heap(Destructor, AdaptEvents) requires data.json.JSONEnc
 			HTTPResponse resp = http.get(new char[](CONTAINERMANAGER, "/list-containers/remote-dist"), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")))
 			JSONElement json = parser.parseDocument(resp.content)
 
-			remoteDistsIps = new IPAddr[json.children.arrayLength]
+			int numIps = json.children.arrayLength
+			remoteDistsIps = new IPAddr[numIps]
 
-			for (int i = 0; i < remoteDistsIps.arrayLength; i++) {
-				JSONElement containerNameJson = parser.getValue(json.children[i], new char[]("name"))
-				char containerName[] = containerNameJson.value
+			for (int i = 0; i < numIps; i++) {
+				JSONElement ipJson = json.children[i]
+				char ipValue[] = ipJson.value
 
 				remoteDistsIps[i] = new IPAddr()
-				remoteDistsIps[i].ip = new char[](containerName)
-				remoteDistsIps[i].port = 8081	
+				remoteDistsIps[i].ip = new char[](ipValue)
+				remoteDistsIps[i].port = 8081
 			}
 	}
 
 	void setupRemoteListsIPs(){
-
 			HTTPResponse resp = http.get(new char[](CONTAINERMANAGER, "/list-containers/remote-dist"), new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close")))
 			JSONElement json = parser.parseDocument(resp.content)
 
-			remoteListsIps = new IPAddr[json.children.arrayLength]
+			int numIps = json.children.arrayLength
+			remoteListsIps = new IPAddr[numIps]
 
-			for (int i = 0; i < remoteListsIps.arrayLength; i++) {
-				JSONElement containerNameJson = parser.getValue(json.children[i], new char[]("name"))
-				char containerName[] = containerNameJson.value
+			for (int i = 0; i < numIps; i++) {
+				JSONElement ipJson = json.children[i]
+				char ipValue[] = ipJson.value
 
 				remoteListsIps[i] = new IPAddr()
-				remoteListsIps[i].ip = new char[](containerName)
+				remoteListsIps[i].ip = new char[](ipValue)
 				remoteListsIps[i].port = 2010
 			}
 	}
