@@ -262,7 +262,7 @@ component provides App requires io.Output out, data.StringUtil strUtil, data.Int
 							dec responseTime = averageResponseTime(perceptionData.metrics[j])
 							char response[] = new char[](
 								iu.intToString(currentConfigIndex), 
-								"|", 
+								",",
 								du.decToString(responseTime))
 								sendResponse(message, response)
 						}

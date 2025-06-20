@@ -2,7 +2,9 @@ data Node {
 	int key
 }
 
-component provides data.adt.List:heap(Destructor, AdaptEvents) requires io.Output out, data.IntUtil iu {
+const int READ_FACTOR = 1
+
+component provides data.adt.List:heap(Destructor, AdaptEvents) requires io.Output out, data.IntUtil iu, util.Math math {
 	Node heap[] = null
 	int length = 0
 	Mutex heapLock = new Mutex()
@@ -22,12 +24,12 @@ component provides data.adt.List:heap(Destructor, AdaptEvents) requires io.Outpu
 			Node node = item
 			heap = new Node[](heap, node)
 			length++
-			char result[] = new char[]("[")
-			for (int i = 0; i < length; i++) {
-				result = new char[](result, " ", iu.intToString(heap[i].key))
-			}
-			result = new char[](result, " ]")
-			out.println("$(result)")
+			// char result[] = new char[]("[")
+			// for (int i = 0; i < length; i++) {
+			// 	result = new char[](result, " ", iu.intToString(heap[i].key))
+			// }
+			// result = new char[](result, " ]")
+			// out.println("$(result)")
 		}
 	}
 
@@ -36,18 +38,18 @@ component provides data.adt.List:heap(Destructor, AdaptEvents) requires io.Outpu
 	 */
 	void List:remove(Data item) {
 		mutex(heapLock) {
+			if(item != null){
 			Node itemToRemove = item
-			for (int i = 0; i < length; i++) {
-				if (heap[i] == itemToRemove) {
-					int j = i
-					while (j < length - 1) {
-						heap[j] = heap[j+1]
-						j++
-					}
-					break
+			Node newArr[] = null
+			for (int i = 0; i < heap.arrayLength; i++) {
+				if (heap[i].key != itemToRemove.key) {
+					newArr = new Node[](newArr, heap[i])
+				} else {
+					length--
 				}
 			}
-			length--
+			heap = newArr
+		}
 		}
 	}
 
@@ -60,9 +62,27 @@ component provides data.adt.List:heap(Destructor, AdaptEvents) requires io.Outpu
 	 */
 	Data List:getFirst() {
 		mutex(heapLock) {
+			if (heap == null || length == 0) { 
+				return null
+			}
+			// for (int i = 0; i < length; i++) {
+			// 	numberOfPrimesLessThan((i + 1) * READ_FACTOR)
+			// }
 			Data item = heap[0]
+			remove(heap[0])
+			// printHeap()
 			return item
+		
 		}
+	}
+
+	void printHeap() {
+		char result[] = new char[]("[")
+		for (int i = 0; i < length; i++) {
+			result = new char[](result, " ", iu.intToString(heap[i].key))
+		}
+		result = new char[](result, " ]")
+		// out.println("$(result)")
 	}
 
 	Data List:getNext() {
@@ -76,13 +96,36 @@ component provides data.adt.List:heap(Destructor, AdaptEvents) requires io.Outpu
 	}
 
 	Data List:getIndex(int ndx) {
-		// TODO
-		return null
+		
+		return heap[ndx]
 	}
 
 	void List:setIndex(int ndx, Data d) {
 		//TODO
 	}
+
+	int numberOfPrimesLessThan(int n) {
+        int result = 0
+        for (int j = 0; j < n; j++) {
+            if (isPrime(n)) { 
+                result++ 
+            }
+        }
+        return result
+    }
+
+    bool isPrime(int n) {
+        if (n <= 1) {
+            return false
+        }
+ 
+        for (int i = 2; i <= math.sqrt(n); i++) {
+           if (n % i == 0) {
+                return false
+           }
+        }
+        return true
+    }
 
 	/*
 	 * Return the heap length.
@@ -104,7 +147,10 @@ component provides data.adt.List:heap(Destructor, AdaptEvents) requires io.Outpu
 			if (heap == null) { 
 				return new Data[] 
 			}
-			Node sortedHeapCopy[] = heapsort(heap, length)
+			for (int i = 0; i < length; i++) {
+				numberOfPrimesLessThan((i + 1) * READ_FACTOR)
+			}
+
 			Data items[]
 			if (isset t) {
 				items = new Data[length] from t
@@ -112,7 +158,7 @@ component provides data.adt.List:heap(Destructor, AdaptEvents) requires io.Outpu
 				items = new Data[length]
 			}
 			for (int i = 0; i < length; i++) {
-				items[i] = sortedHeapCopy[i]
+				items[i] = heap[i]
 			}
 			return items
 		}
