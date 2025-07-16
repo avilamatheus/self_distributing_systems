@@ -1,112 +1,156 @@
-# Sistemas Auto-distribuídos: Instanciação Dinâmica de Componentes
+# Como executar o projeto
 
-## Introdução
+## Pré-requisitos
 
-Aplicações modernas, como Internet das Coisas (IoT), análise de dados, streaming de vídeo, realidade aumentada e realidade virtual, apresentam requisitos rigorosos de qualidade de serviço, especialmente em termos de tempo de resposta e throughput.
+- Docker
+- Docker Compose
+- Docker Swarm
+- Tailscale (opcional, para rodar containers na nuvem)
 
-Essas demandas resultaram na necessidade de infraestruturas ricas em recursos computacionais, levando ao desenvolvimento do **Edge-Cloud Continuum**, uma abordagem que combina plataformas de computação em borda e nuvem para oferecer escalabilidade, flexibilidade e mobilidade. Essa combinação permite que aplicações sejam implementadas em toda a rede, otimizando a qualidade de serviço.
+## Instruções
 
-No entanto, muitas aplicações não conseguem explorar plenamente o potencial do Edge-Cloud Continuum devido à sua arquitetura monolítica e com estado. Os **Sistemas Auto-Distribuídos** surgem como uma alternativa para superar essa limitação. Eles permitem que aplicações monolíticas sejam replicadas ou movidas em infraestruturas distribuídas em tempo de execução, facilitando o dimensionamento horizontal e a implantação em ambientes híbridos de borda e nuvem.
+### 1. Setup do nó manager (seu computador local)
 
-Apesar de promissores, os Sistemas Auto-Distribuídos ainda não estão integrados a infraestruturas amplamente adotadas, como contêineres e orquestradores, sendo implantados de forma específica em nível de processos. Este projeto busca superar essas limitações, integrando Sistemas Auto-Distribuídos a contêineres e orquestradores amplamente utilizados, como Docker e Kubernetes.
+- Execute o script `./swarm-scripts/setup-swarm-manager.sh` para configurar o nó manager do Docker Swarm.
+- O script pedirá um IP para que os demais nós possam se conectar. Use o IP da sua máquina local ou o IP fornecido pelo Tailscale (caso esteja utilizando).
+- A saída do script será:
+  - Um comando `docker swarm join` que deverá ser executado nos nós workers;
+  - Um arquivo `.txt` contendo o token de join para reutilização posterior.
+
+### 2. Setup dos nós workers (containers na nuvem)
+
+- Em cada worker, execute o script `./swarm-scripts/join-swarm-worker.sh`.
+- O script solicitará o IP do nó manager e o token de join obtido no passo anterior.
+
+### 3. Definição de labels nos nós
+
+- Em cada nó, execute:
+
+  ```bash
+  docker info --format '{{.Name}}'
+  ```
+
+- Use o nome retornado para aplicar os labels:
+
+  ```bash
+  docker node update --label-add "location=$LOCATION" "$NODE_NAME"
+  ```
+
+  > Onde `$LOCATION` pode ser `edge`, `cloud`, etc., e `$NODE_NAME` é o nome do nó obtido.
+
+### 4. Criar a stack do Docker Swarm
+
+- Execute:
+
+  ```bash
+  docker stack deploy -c docker-compose-swarm.yaml sds
+  ```
+
+- Isso irá criar a stack usando o arquivo `docker-compose-swarm.yaml`, inicializando a API e o Dana.
+
+### 5. Execução da Dana e da API
+
+- A API `container-manager` ficará acessível na porta `8079`.
+- O Dana rodará na porta `8080` do nó manager.
+- Para acessar o terminal do Dana:
+
+  ```bash
+  docker ps          # pegue o nome do container Dana
+  docker attach <nome_do_container>
+  ```
 
 ---
 
-## Descrição da Proposta
+### 6. Trocando entre composições: local ↔ distribuída
 
-### Detalhamento da Solução Proposta
+A aplicação Dana pode operar em dois modos principais:
 
-O trabalho desenvolvido neste projeto concentrou-se na integração inicial de Sistemas Auto-Distribuídos com contêineres Docker, utilizando uma abordagem baseada em instanciação dinâmica de componentes e comunicação via redes privadas Docker. A solução implementada tem os seguintes objetivos:
+- **Local**: todo o processamento ocorre no próprio container `dana`.
+- **Distribuído**: o processamento é delegado para containers `remote-dist`, com três estratégias possíveis:
+  - `sharding`
+  - `propagate`
+  - `alternate`
 
-- **Encapsulamento de Componentes:** Criar uma imagem Docker base única, denominada `dana`, contendo todos os requisitos e configurações necessários para o programa. Essa imagem foi utilizada como base para instanciar os diferentes componentes do sistema, garantindo consistência e isolamento.
-- **Instanciação Dinâmica:** Implementar um mecanismo para instanciar dinamicamente componentes durante a execução, evitando a necessidade de criar novos contêineres para cada instância. Essa abordagem otimiza os recursos e reduz o tempo de inicialização.
+A troca de composição é **manual**, feita via terminal interativo da Dana. Você digita o modo desejado (`sharding`, `propagate`, `alternate`) e pressiona `Enter`.
 
-- **Automação do Gerenciamento:** Desenvolver uma API RESTful para automatizar a gestão de contêineres, permitindo criar, listar e remover instâncias conforme a demanda.
+Após a escolha, a Dana solicitará que você pressione `Enter` para iniciar a nova composição. **Antes de confirmar, é necessário enviar uma requisição `POST` para a API `container-manager` com a configuração desejada de containers `remote-dist`**:
 
-- **Comunicação em Rede Docker:** Configurar uma rede privada Docker para permitir a comunicação direta entre os componentes, eliminando a necessidade de expor portas ao ambiente externo.
+```http
+POST http://localhost:8079/docker/start-containers
+Content-Type: application/json
 
-Este trabalho foi uma etapa inicial, focada no uso de contêineres como meio para distribuir componentes de maneira dinâmica e eficiente. No futuro, pretende-se expandir essa solução para integrar completamente os Sistemas Auto-Distribuídos com plataformas de borda e nuvem, como Google Cloud e KubeEdge, possibilitando uma infraestrutura híbrida que abrange o Edge-Cloud Continuum.
+{
+  "containerName": "remote-dist",
+  "cmd": "dana -sp ../readn RemoteDist.o",
+  "deployments": [
+    { "location": "edge", "numberOfContainers": 1 },
+    { "location": "cloud", "numberOfContainers": 2 }
+  ]
+}
+```
+
+- `containerName`: nome lógico dos containers.
+- `cmd`: comando a ser executado nos containers (ex: `dana -sp ../readn RemoteDist.o`).
+- `deployments`: define a quantidade e a localização dos containers `remote-dist`.
+
+Você pode enviar essa requisição com `curl`, Postman, Insomnia ou qualquer cliente HTTP. Exemplo com `curl`:
+
+```bash
+curl -X POST http://localhost:8079/docker/start-containers \
+  -H "Content-Type: application/json" \
+  -d @payload.json
+```
 
 ---
 
-## Principais Funcionalidades
+### 7. Alterando a composição distribuída
 
-As funcionalidades principais desenvolvidas neste projeto são:
+Caso deseje alterar a **composição distribuída** — seja trocando o modo de execução (`sharding`, `propagate`, `alternate`) ou modificando o número/localização dos contêineres `remote-dist` — siga o fluxo abaixo:
 
-- **Instanciação Dinâmica de Componentes:** Permitir que componentes sejam instanciados dinamicamente durante a execução, sem necessidade de recompilação, facilitando a escalabilidade do sistema.
-- **Reaproveitamento de Contêineres:** Evitar a criação desnecessária de novos contêineres, reduzindo o tempo de inicialização e otimizando o uso de recursos.
-- **Integração com Docker:** Contêinerização dos componentes usando uma imagem base única para garantir portabilidade e isolamento.
-- **Comunicação em Rede Docker:** Configuração de uma rede privada Docker para facilitar a comunicação entre os componentes, dispensando a exposição de portas desnecessárias.
-- **Gerenciamento de Contêineres com API:** Desenvolvimento de uma API para gerenciar a instanciação, remoção e listagem dos contêineres dinamicamente.
+1. No terminal da Dana, **digite `local` e pressione `Enter`** para retornar à composição local.
+2. Em seguida, **digite o novo modo desejado** (`sharding`, `propagate` ou `alternate`) e pressione `Enter`.
+3. **Antes de confirmar**, envie uma nova requisição `POST` para a API `container-manager` com os parâmetros atualizados, **caso o número ou a localização dos contêineres tenha mudado**.
 
----
+> ✅ Se você apenas estiver trocando o modo de execução e **os mesmos contêineres `remote-dist` ainda se aplicarem**, **não é necessário reenviar a requisição**. A Dana irá reutilizar os contêineres já em execução.
 
-## Abordagem Utilizada para Implementação
+### 8. Parar a stack
 
-A implementação deste projeto foi dividida em etapas específicas para atender os requisitos de integração com infraestrutura de borda e nuvem:
+Para parar a stack e remover os serviços, execute:
 
-1. **Contêinerização com Docker:**
+```bash
+docker stack rm sds
+```
 
-   - Foi criada uma imagem base, chamada `dana`, utilizando um Dockerfile que configura o ambiente e os requisitos do programa.
-   - Os componentes do sistema foram instanciados dinamicamente usando essa imagem como base, garantindo consistência e reduzindo o tempo de build.
+Isso não removerá os containers `remote-dist` em execução, para isso use o comando:
 
-2. **Desenvolvimento de API para Gerenciamento:**
+```bash
+docker service ls
+```
 
-   - Uma API RESTful foi desenvolvida em Java/Spring Boot para gerenciar dinamicamente os contêineres do sistema.
-   - Endpoints permitem instanciar, listar e remover contêineres, além de reaproveitar contêineres existentes para otimizar o uso de recursos.
+- Identifique o serviço `remote-dist-LOCATION` e remova-o com:
 
-3. **Instanciação Dinâmica:**
+```
+docker service rm remote-dist-LOCATION
+```
 
-   - Os componentes podem ser instanciados passando comandos e nomes específicos, permitindo a flexibilidade para lidar com diferentes partes do sistema.
-   - Essa abordagem possibilita escalabilidade dinâmica durante a execução, sem a necessidade de alterações no código fonte.
+> LOCATION pode ser `edge`, `cloud`, etc., dependendo de onde os containers estão rodando.
 
-4. **Integração com Edge-Cloud:**
+### 8. Scripts utéis
 
-   - Apesar de ainda não concluída, a integração com Google Cloud e KubeEdge está nos planos futuros, visando a expansão da solução para ambientes distribuídos híbridos.
+- `./swarm-scripts/labels/list-nodes-info.sh`: lista todos os nós e suas labels, exemplo:
 
-## Diagrama de Comunicação - Projeto Atual
+  ```bash
+  📡 Listando nós do Swarm...
 
-### Composição Local
+  🖥️  Hostname: lenovo
+  🔧 Função:   Manager
+  📍 Local:    edge
+  -------------------------
+  🖥️  Hostname: sds-tcc-matheus
+  🔧 Função:   Worker
+  📍 Local:    cloud
+  -------------------------
+  ```
 
-![alt text](/readmecontent/local1.png)
-
-### Composição Distribuída
-
-![alt text](/readmecontent/dist1.png)
-
-## Diagrama de Comunicacão - Projeto Futuro
-
-Nesta seção, apresentaremos dois diagramas que ilustram o fluxo de dados e a comunicação entre os componentes do sistema em diferentes cenários de operação.
-
-O primeiro diagrama foca na substituição de componentes por proxies dentro de uma aplicação que roda na borda (Edge). Ele demonstra como componentes individuais podem ser realocados dinamicamente, com a camada de proxies garantindo a continuidade do serviço e a transparência na comunicação entre os módulos.
-
-O segundo diagrama expande essa visão ao representar os mesmos componentes distribuídos entre a borda e a nuvem (Cloud), mostrando a comunicação entre ambos os ambientes. Esse cenário destaca como os componentes da aplicação podem ser transferidos da borda para a nuvem, garantindo otimização e flexibilidade em termos de desempenho.
-
-Embora a comunicação entre a borda e a nuvem seja o foco principal para fins de compreensão, o processo inverso – realocação de componentes da nuvem para a borda – também pode ocorrer. No entanto, utilizamos o cenário de borda para nuvem devido à sua maior simplicidade de entendimento para a presente explicação.
-
-Após a apresentação de cada diagrama, explicaremos os pontos mais relevantes de sua estrutura, detalhando os elementos destacados e suas funções dentro do sistema.
-
-![Diagrama de comunicação - Parte 1](readmecontent/diagrama1.png)
-
-Sobre cada um dos pontos numerados neste primeiro diagrama, podemos comentar o seguinte:
-
-1. **Dispositivos de Borda (Edge):** Representa os diversos dispositivos de borda nos quais a aplicação pode estar em execução. A borda (Edge) é responsável por fornecer processamento local e imediato, reduzindo a latência e o uso de largura de banda ao evitar a necessidade de enviar todos os dados diretamente para a nuvem. Nesse cenário, a aplicação está rodando diretamente em um destes dispositivos, permitindo a realocação e substituição de componentes conforme necessário para otimizar o desempenho e a continuidade dos serviços.
-2. **Orquestradores de Contêineres na Borda (KubeEdge, MicroK8s, K3s):** Estes são os orquestradores de contêineres que operam nos dispositivos de borda, responsáveis por gerenciar e coordenar a execução dos contêineres que compõem a aplicação distribuída. KubeEdge, MicroK8s e K3s são soluções otimizadas para ambientes de borda, garantindo a eficiência na execução de contêineres em dispositivos com recursos limitados.
-3. **Container Docker:** Este representa o ambiente isolado onde a aplicação está em execução, encapsulando seus componentes e dependências. O Docker permite que a aplicação rode de forma consistente em qualquer infraestrutura, seja na borda ou na nuvem.
-4. **Aplicação Baseada em Sistemas Auto-Distribuídos (Componentes A, B, C, D, E):** A aplicação em execução dentro do contêiner Docker é composta por diversos componentes distribuídos e realocados dinamicamente entre diferentes ambientes.
-5. **Componentes Destinados à Realocação (Componentes D e E):** Os componentes D e E serão realocados para a nuvem, motivados por necessidade de maior capacidade computacional ou outras otimizações de desempenho.
-6. **Proxy para Componentes Realocados:** Após a realocação dos componentes D e E para a nuvem, eles serão substituídos localmente por um proxy que atua como intermediário, garantindo a continuidade do funcionamento do sistema.
-
-![Diagrama de comunicação - Parte 2](readmecontent/diagrama2.png)
-
-Sobre cada um dos pontos numerados neste segundo diagrama, podemos comentar o seguinte:
-
-7. **Conexão RPC entre Proxy e Componentes Realocados:** Conexão remota via RPC (Remote Procedure Call) entre o proxy na borda e os componentes realocados na nuvem.
-8. **Ambiente de Nuvem (AWS, Google Cloud, Azure):** Representa as plataformas de nuvem que oferecem a infraestrutura para hospedar e executar os componentes realocados.
-9. **Orquestrador de Contêineres na Nuvem (Kubernetes):** Gerencia o ciclo de vida dos contêineres que hospedam os componentes realocados, facilitando escalabilidade e resiliência.
-10. **Componentes Realocados dentro de Contêineres Docker e Replicados:** Componentes D e E, realocados para a nuvem, executam dentro de contêineres Docker e podem ser replicados para garantir resiliência e desempenho.
-
-## Mais Detalhes
-
-- <a href="/readmecontent/execute.md">Como executar o projeto</a>
-- <a href="/readmecontent/api.md">Como funciona a API</a>
+- `./swarm-scripts/reset/reset-swarm-manager.sh`: reseta o nó manager, removendo o Swarm, remove os serviços e containers, e limpa as redes criadas pelo Swarm.
+- `./swarm-scripts/reset/reset-swarm-worker.sh`: reseta o nó worker, saindo do Swarm.

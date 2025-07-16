@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   container-manager:
-    image: container-manager:latest
+    image: avilamatheus/api-sds:latest
     ports:
       - target: 8079
         published: 8079
