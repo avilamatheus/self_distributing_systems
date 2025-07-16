@@ -93,35 +93,20 @@ component provides App requires io.Output out, data.StringUtil strUtil, data.Int
 		}
 	}
 
-	void startContainers() {
-		out.println("Select the number of containers: ")
-		int numberOfContainers = iu.intFromString(in.readln())
-		out.println("Where to start the containers? ")
-
-		char location[] = in.readln()
-		out.println("$(debugMSG) Starting $(iu.intToString(numberOfContainers)) containers in $(location)")
-		
-		http.post(new char[](CONTAINERMANAGER, "/start-containers/", location, "/remote-dist/", iu.intToString(numberOfContainers)), 
-		new Header[](new Header("Content-Type", "application/json"), new Header("Connection", "close"), new Header("cmd", "dana -sp ../readn RemoteDist.o")), null)
-	}
-
 	void commandInterpret(char cmd[]) {
 		String cmdList[] = strUtil.explode(cmd, " ")
 		if (cmdList.arrayLength == 1) {
 			if (cmd == HELP) {
 				help()
 			} else if (cmd == PROPAGATE) {
-				startContainers()
 				out.println("Press enter to begin propagation...")
 				in.readln()
 				distribute("ListCPPropagate.o")
 			} else if (cmd == ALTERNATE) {
-				startContainers()
 				out.println("Press enter to begin alternating...")
 				in.readln()
 				distribute("ListCPAlternate.o")
 			} else if (cmd == SHARDING) {
-				startContainers()
 				out.println("Press enter to begin sharding...")
 				in.readln()
 				distribute("ListCPSharding.o")

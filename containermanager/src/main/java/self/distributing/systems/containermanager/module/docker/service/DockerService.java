@@ -8,6 +8,9 @@ import com.github.dockerjava.api.model.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.*;
+import java.util.stream.Collectors;
+
+import self.distributing.systems.containermanager.module.docker.controller.dto.request.DeploymentDTO;
 
 @org.springframework.stereotype.Service
 public class DockerService {
@@ -90,31 +93,38 @@ public class DockerService {
 		}
 	}
 
-	public void startOrUpdateService(String serviceName, String cmd, int replicas, String newLocation) {
+	public void startOrUpdateService(String containerName, String cmd, List<DeploymentDTO> deploymentList) {
 		List<String> commandList = splitStringBySpaces(cmd);
-		List<Service> existing = listServicesByName(serviceName);
 
-		if (existing.isEmpty()) {
-			createSwarmService(serviceName, commandList, replicas, newLocation);
-			return;
+		// 1. Nomes esperados com base na lista de deployment
+		Set<String> expectedServiceNames = deploymentList.stream()
+				.map(dep -> containerName + "-" + dep.getLocation())
+				.collect(Collectors.toSet());
+
+		// 2. Remover serviços não listados
+		List<Service> existingServices = dockerClient.listServicesCmd().exec();
+		for (Service service : existingServices) {
+			String serviceName = service.getSpec().getName();
+			if (serviceName.startsWith(containerName + "-") && !expectedServiceNames.contains(serviceName)) {
+				dockerClient.removeServiceCmd(service.getId()).exec();
+			}
 		}
 
-		Service service = existing.get(0);
-		List<String> currentConstraints = Optional.ofNullable(service.getSpec().getTaskTemplate().getPlacement())
-				.map(ServicePlacement::getConstraints)
-				.orElse(Collections.emptyList());
+		for (DeploymentDTO deployment : deploymentList) {
+			String location = deployment.getLocation();
+			int replicas = deployment.getNumberOfContainers();
+			String serviceName = containerName + "-" + location;
 
-		String desiredConstraint = "node.labels.location==" + newLocation;
+			List<Service> existing = listServicesByName(serviceName);
 
-		boolean constraintChanged = currentConstraints.stream().noneMatch(desiredConstraint::equals);
-
-		if (constraintChanged) {
-			removeService(serviceName);
-			createSwarmService(serviceName, commandList, replicas, newLocation);
-		} else {
-			updateServiceReplicas(serviceName, replicas);
+			if (existing.isEmpty()) {
+				createSwarmService(serviceName, commandList, replicas, location);
+			} else {
+				updateServiceReplicas(serviceName, replicas);
+			}
 		}
 	}
+
 
 	private List<String> splitStringBySpaces(String input) {
 		if (input == null || input.isEmpty()) {
@@ -126,22 +136,31 @@ public class DockerService {
 				.toList();
 	}
 
-	public List<String> getServiceReplicaNames(String serviceName) {
+	public List<String> getServiceReplicaNames(String servicePrefix) {
 		List<String> names = new ArrayList<>();
 
-		List<Task> tasks = dockerClient.listTasksCmd()
-				.withServiceFilter(serviceName)
-				.withStateFilter(TaskState.RUNNING)
-				.exec();
+		// Pega todos os serviços com nome que começa com "remote-dist"
+		List<Service> matchingServices = dockerClient.listServicesCmd()
+				.withNameFilter(Collections.emptyList()) // pega todos
+				.exec()
+				.stream()
+				.filter(s -> s.getSpec().getName().startsWith(servicePrefix + "-"))
+				.toList();
 
-		for (Task task : tasks) {
-			if (task.getStatus().getState() == TaskState.RUNNING) {
-				String name = serviceName + "." + task.getSlot() + "." + task.getId();
+		for (Service service : matchingServices) {
+			List<Task> tasks = dockerClient.listTasksCmd()
+					.withServiceFilter(service.getSpec().getName())
+					.withStateFilter(TaskState.RUNNING)
+					.exec();
+
+			for (Task task : tasks) {
+				String name = service.getSpec().getName() + "." + task.getSlot() + "." + task.getId();
 				names.add(name);
 			}
 		}
 
 		return names;
 	}
+
 
 }
